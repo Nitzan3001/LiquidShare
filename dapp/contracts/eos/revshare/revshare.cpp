@@ -43,7 +43,7 @@ CONTRACT_START()
     return true;
 
   }
-
+//TODO - pull table, iterate over each row, send inline action for each contributor 
   [[eosio::on_notify("dappservices::transfer")]]
     void deposit(name hodler, name to, eosio::asset quantity, std::string memo)
     {
@@ -74,4 +74,7 @@ CONTRACT_START()
         std::vector<char> payload;
         schedule_timer(_self, payload, 60*60*24);
   }
+
+  // addaccount, removeaccount, updateaccount - add remove and update accounts
+
 CONTRACT_END((testschedule))
