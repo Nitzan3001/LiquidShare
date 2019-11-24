@@ -10,71 +10,93 @@
 #define CONTRACT_NAME() revshare
 
 CONTRACT_START()
-  TABLE stat {
-      uint64_t   counter = 0;
-  };
-
-  typedef eosio::singleton<"stat"_n, stat> stats_def;
 
   TABLE mapping {
-      name account;
+      name developer_account;
       double percentage;
-      uint64_t primary_key()const {return account.value;}
   };
 
-  typedef eosio::multi_index<"mapping"_n, mapping> mapping_def;
+  typedef eosio::singleton<"mapping"_n, mapping> mapping_def_t;
 
-  TABLE usage {
-      name service;
-      double quota;
-      uint64_t primary_key()const {return service.value;}
+    struct usage_t{
+        asset quantity;
+        name provider;
+        name payer;
+        name service;
+        name package;
+        bool success = false;
   };
-
-  typedef eosio::multi_index<"usage"_n, usage> usage_def;
 
   bool timer_callback(name timer, std::vector<char> payload, uint32_t seconds){
       
     action(
         permission_level{get_self(),"active"_n},
-        "dappservices",
+        "dappservices"_n,
         "claimrewards"_n,
-        std::make_tuple("heliosselene")
+        std::make_tuple(get_self()) //Auto generate name
       ).send();
     return true;
 
   }
+
 //TODO - pull table, iterate over each row, send inline action for each contributor 
   [[eosio::on_notify("dappservices::transfer")]]
-    void deposit(name hodler, name to, eosio::asset quantity, std::string memo)
+    void send_payment(name from, name to, eosio::asset quantity, std::string memo)
     {
-        if (to != get_self() || hodler == get_self())
+
+          if (to != get_self() || from != name{"dappservices"} || get_code() == name{"dappservices"})
         {
-            print("These are not the droids you are looking for.");
             return;
         }
 
-        check(now() < the_party, "You're way late");
-        check(quantity.amount > 0, "When pigs fly");
-        check(quantity.symbol == hodl_symbol, "These are not the droids you are looking for.");
+        usage_t usage_report;
 
-        balance_table balance(get_self(), hodler.value);
-        auto hodl_it = balance.find(hodl_symbol.raw());
+        mapping_def_t mapping_def(_self, usage_report.service.value);
 
-        if (hodl_it != balance.end())
-            balance.modify(hodl_it, get_self(), [&](auto &row) {
-            row.funds += quantity;
-            });
-        else
-            balance.emplace(get_self(), [&](auto &row) {
-            row.funds = quantity;
-            });
+        if(!mapping_def.exists()) {
+            return;
         }
+
+        mapping new_mapping = mapping_def.get();
+        name account;
+        new_mapping.developer_account = account;
+        double percentage;
+        new_mapping.percentage = percentage;
+
+        //check what percantage should go to developer, then send payment to developer account
+        asset payment;
+        payment.amount = percentage * quantity.amount;
+        payment.symbol = quantity.symbol;
+        // how to convert and mult quantity
+        
+        action(
+            permission_level{get_self(),"active"_n},
+            "dappservices"_n,
+            "transfer"_n,
+            std::make_tuple(get_self(), name{account}, payment, "your rev share") //Auto generate name
+        ).send();
+    }
 
     [[eosio::action]] void testschedule() {
         std::vector<char> payload;
         schedule_timer(_self, payload, 60*60*24);
+    }
+
+    [[eosio::action]] void set(name Account,double Percentage, name service) {
+        // Add account
+        mapping_def_t mapping_def(_self, service.value);
+        mapping new_mapping;
+        new_mapping.developer_account = Account;
+        new_mapping.percentage = Percentage;
+        
+        mapping_def.set(new_mapping, _self); // mixed?
   }
 
-  // addaccount, removeaccount, updateaccount - add remove and update accounts
+    [[eosio::action]] void remove(name Account, name service) {
+        //Remove an accountmapping_def_t mapping_def(_self, usage_report.service.value);
+        
+        mapping_def_t mapping_def(_self, service.value);
+        mapping_def.remove(); // mixed?
+  }
 
-CONTRACT_END((testschedule))
+CONTRACT_END((testschedule)(set)(remove))
